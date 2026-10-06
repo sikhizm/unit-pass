@@ -114,9 +114,10 @@ psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/check_rls_enabled.s
    archive field, tenant policies, and company service booking URL without deleting existing data.
 4. **Verify the security guarantees** by running the two scripts in `supabase/tests/` (section 2).
 5. **Auth URLs** — in *Authentication → URL Configuration*:
-   * *Site URL*: `http://localhost:3000` for dev, your production domain later.
+   * *Site URL*: `https://unit-pass.vercel.app` for production (use `http://localhost:3000` in a separate dev project).
    * *Redirect URLs*: add `${NEXT_PUBLIC_SITE_URL}/auth/callback` and `${NEXT_PUBLIC_SITE_URL}/auth/reset-password`
-     (`http://localhost:3000/**` is acceptable for local development).
+     Production already allows `https://unit-pass.vercel.app/**`; keep that setting.
+     `http://localhost:3000/**` is acceptable for local development.
 6. **Email confirmation** — *Authentication → Providers → Email*. Keep it **on** for production. For faster local
    testing you may turn it off; the app handles both (it detects an immediate session after sign-up and goes straight
    to the dashboard).
@@ -152,6 +153,24 @@ the production build itself does not require credentials.
 
 **Deployment (Vercel):** import the repository, set the variables above for each environment, and deploy. No
 `vercel.json` is required in Phase 1.
+
+**Production auth origin:** set `NEXT_PUBLIC_SITE_URL=https://unit-pass.vercel.app` in Vercel's
+**Production** environment, then rebuild/redeploy. Next.js inlines this public variable at build time;
+changing only the runtime setting does not update an existing browser bundle. Do not set it to `VERCEL_URL`
+or a generated deployment hostname. Signup and password recovery require this explicit origin and fail
+with a configuration error when it is missing, rather than falling back to the current browser host.
+Trailing slashes/paths are normalized to the origin; HTTPS is required except on localhost.
+
+Expected production destinations:
+* Confirmation: `https://unit-pass.vercel.app/auth/callback?next=/dashboard`
+* Recovery: `https://unit-pass.vercel.app/auth/callback?next=/auth/reset-password`
+
+Start signup/recovery at `https://unit-pass.vercel.app`, not a generated deployment URL: PKCE verifier
+cookies belong to the initiating host. The callback keeps its existing same-host redirect after setting
+session cookies. Preview/local auth needs its own explicit `NEXT_PUBLIC_SITE_URL` and matching Supabase
+allowlist entry; use a separate development Supabase project where possible. Do not broaden the production
+allowlist to generated hosts to work around a missing build-time variable. Existing email templates and
+PKCE/OTP verification do not need changing for this fix; send fresh emails after redeploying to test it.
 
 ---
 

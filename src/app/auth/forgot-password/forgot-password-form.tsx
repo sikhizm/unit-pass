@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { getSiteUrl } from '@/lib/site-url';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,10 +15,6 @@ export function ForgotPasswordForm() {
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function siteUrl() {
-    return process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
-  }
-
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
@@ -26,7 +23,7 @@ export function ForgotPasswordForm() {
     try {
       const supabase = getSupabaseBrowserClient();
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${siteUrl()}/auth/callback?next=/auth/reset-password`,
+        redirectTo: `${getSiteUrl()}/auth/callback?next=/auth/reset-password`,
       });
 
       if (resetError) {

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/client';
+import { getSiteUrl } from '@/lib/site-url';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,10 +19,6 @@ export function SignUpForm() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  function siteUrl() {
-    return process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
-  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,7 +41,7 @@ export function SignUpForm() {
         email,
         password,
         options: {
-          emailRedirectTo: `${siteUrl()}/auth/callback?next=/dashboard`,
+          emailRedirectTo: `${getSiteUrl()}/auth/callback?next=/dashboard`,
         },
       });
 

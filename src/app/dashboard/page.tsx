@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/card';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireCompany } from '@/lib/session';
-import type { CustomerRow } from '@/lib/types';
+import type { CustomerListRow } from '@/lib/types';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -56,7 +56,7 @@ export default async function DashboardPage() {
     queryErrors.forEach((error) => console.error('[dashboard] Failed to load customer summary:', error?.message));
   }
   const customerDataFailed = queryErrors.length > 0;
-  const recentCustomers = (recentResult.data ?? []) as CustomerRow[];
+  const recentCustomers = (recentResult.data ?? []) as CustomerListRow[];
 
   return (
     <div className="space-y-6">

@@ -29,6 +29,11 @@ export type CustomerRow = {
   updated_at: string;
 };
 
+export type CustomerListRow = Pick<
+  CustomerRow,
+  'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'city' | 'state' | 'archived_at' | 'created_at' | 'updated_at'
+>;
+
 export type CustomerFormRow = Pick<
   CustomerRow,
   'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'address' | 'city' | 'state' | 'postal_code' | 'country'

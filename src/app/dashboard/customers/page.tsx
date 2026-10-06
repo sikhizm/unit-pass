@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { requireCompany } from '@/lib/session';
 import { buildCustomerSearchFilter, MAX_CUSTOMER_SEARCH_LENGTH } from '@/lib/customer-search';
-import type { CustomerRow } from '@/lib/types';
+import type { CustomerListRow } from '@/lib/types';
 
 export const metadata: Metadata = {
   title: 'Customers',
@@ -31,7 +31,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Se
   const includeArchived = singleParam(searchParams.includeArchived) === 'true';
   const page = parsePage(singleParam(searchParams.page));
 
-  let customers: CustomerRow[] = [];
+  let customers: CustomerListRow[] = [];
   let totalCount = 0;
   let loadError: string | null = null;
 
@@ -56,7 +56,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Se
       console.error('[customers] Failed to load customer list:', error.message);
       loadError = 'Customers could not be loaded. Please try again.';
     } else {
-      customers = (data ?? []) as CustomerRow[];
+      customers = (data ?? []) as CustomerListRow[];
       totalCount = count ?? 0;
     }
   }
@@ -211,7 +211,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Se
   );
 }
 
-function CustomerCard({ customer }: { customer: CustomerRow }) {
+function CustomerCard({ customer }: { customer: CustomerListRow }) {
   const name = `${customer.first_name} ${customer.last_name}`;
   const cityState = [customer.city, customer.state].filter(Boolean).join(', ');
 

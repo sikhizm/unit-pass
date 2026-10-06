@@ -7,10 +7,37 @@ export type CompanyRow = {
   email: string | null;
   website: string | null;
   address: string | null;
+  service_booking_url: string | null;
   default_service_interval: number;
   created_at: string;
   updated_at: string;
 };
+
+export type CustomerRow = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  country: string | null;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CustomerListRow = Pick<
+  CustomerRow,
+  'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'city' | 'state' | 'archived_at' | 'created_at' | 'updated_at'
+>;
+
+export type CustomerFormRow = Pick<
+  CustomerRow,
+  'id' | 'first_name' | 'last_name' | 'email' | 'phone' | 'address' | 'city' | 'state' | 'postal_code' | 'country'
+>;
 
 export type CompanyMemberRow = {
   id: string;

@@ -660,6 +660,7 @@ phase's acceptance criteria, and say "deferred to Phase N" instead of building i
 | 2026-10-07 | 1 | Root `app/`… Vite leftovers removed; `.next/**` and `*.tsbuildinfo` untracked and gitignored; legacy schema moved to `supabase/legacy/schema.sql.txt` | baseline hygiene; migrations are authoritative |
 | 2026-10-07 | 1 | Added `supabase/tests/local/postgres_shim.sql` so the RLS suite can run on a plain Postgres without Supabase credentials | makes the security tests reproducible offline; the canonical path stays `psql "$SUPABASE_DB_URL"` |
 | 2026-10-07 | 1 | Unused shadcn components kept; unused deps left for Phase 8 | cost control: no rewrites/removals without evidence of benefit |
+| 2026-10-06 | 2 | Company logo upload deferred to Phase 5; customers use `archived_at` soft archive and search escapes literal ILIKE wildcards | Preserves customer records, keeps storage out of this phase, and makes search terms literal while RLS scopes every query |
 
 Future phases: add a row per decision that changes architecture, dependencies, schema, or security posture.
 

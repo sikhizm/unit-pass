@@ -7,9 +7,9 @@ open a mobile-friendly digital passport (equipment details, warranty, service hi
 **Book Service** action), while the company is reminded when the unit is due for maintenance — turning installations
 into repeat service revenue.
 
-> **Where the project is today:** Phase 1 (foundation, authentication, multi-tenancy) is implemented. Product features
-> (customers, equipment, QR codes, public passports, service history, documents, reminders, billing) arrive in
-> Phases 2–8. See [`prompts/README.md`](prompts/README.md) for the phase plan and the rules agents must follow.
+> **Where the project is today:** Phases 1–2 are implemented: foundation, authentication, multi-tenancy, company
+> profiles, and customer management. Equipment, QR codes, public passports, service history, documents, reminders,
+> and billing arrive in Phases 3–8. See [`prompts/README.md`](prompts/README.md) for the phase plan and agent rules.
 
 ---
 
@@ -33,6 +33,8 @@ src/
     providers.tsx          # client providers (toaster/sonner/tooltip)
     auth/                  # sign-in, sign-up, forgot/reset password, check-email, callback route
     dashboard/             # protected shell (server-side session check)
+      customers/           # tenant-scoped customer list, create, detail, edit, archive
+      settings/            # company profile and service booking settings
   components/
     ui/                    # shadcn/ui primitives
     Sidebar.tsx            # dashboard navigation (mobile-aware)
@@ -100,14 +102,16 @@ psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/check_rls_enabled.s
    `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` into `.env.local`.
 2. **Copy the connection string** (*Project Settings → Database → Connection string → URI*) into `SUPABASE_DB_URL`
    (used only by the migration/test scripts, never by the app at runtime).
-3. **Apply the migrations** (authoritative schema):
+3. **Apply the migrations** (authoritative schema) in order:
 
    ```bash
    psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261007000001_phase1_foundation.sql
+   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20261015000001_phase2_customers.sql
    ```
 
-   Or paste the file into the Supabase SQL editor. The migration is idempotent and also repairs a database where the
-   legacy `supabase/legacy/schema.sql.txt` was applied earlier (it removes the old recursive policies).
+   Or paste each file into the Supabase SQL editor in the same order. Both migrations are idempotent. Phase 1 also
+   repairs a database where the legacy `supabase/legacy/schema.sql.txt` was applied earlier; Phase 2 adds the customer
+   archive field, tenant policies, and company service booking URL without deleting existing data.
 4. **Verify the security guarantees** by running the two scripts in `supabase/tests/` (section 2).
 5. **Auth URLs** — in *Authentication → URL Configuration*:
    * *Site URL*: `http://localhost:3000` for dev, your production domain later.
@@ -117,15 +121,16 @@ psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/check_rls_enabled.s
    testing you may turn it off; the app handles both (it detects an immediate session after sign-up and goes straight
    to the dashboard).
 
-### What the database guarantees (Phase 1)
+### What the database guarantees (Phases 1–2)
 
 | Table | Contents | Access |
 |---|---|---|
-| `companies` | one row per HVAC company (tenant) | members read; admins update; **no direct insert** — companies are only created by the `create_company_with_owner()` function |
+| `companies` | one row per HVAC company (tenant), including company contact details, booking URL, and default service interval | members read; admins update; **no direct insert** — companies are only created by `create_company_with_owner()` |
 | `profiles` | 1:1 with `auth.users` (auto-created by a trigger) | a user reads/updates only their own row |
 | `company_members` | user ↔ company + role (`owner`/`admin`/`technician`) | members read their company's members; admins manage them |
+| `customers` | company-owned contact records with `archived_at` soft archive | members read/insert/update only their company; hard-delete policy is reserved for a future explicit purge, and the app never hard-deletes |
 
-* RLS is enabled on all three tables; `anon` has **no** privileges on them.
+* RLS is enabled on all four tables; `anon` has **no** privileges on them.
 * `public.is_company_member()` / `public.is_company_admin()` are `SECURITY DEFINER` helpers used by the policies —
   this is what prevents the "infinite recursion detected in policy" failure of the legacy schema.
 * `company_members` is the source of truth for tenancy; `profiles.company_id` is only a convenience pointer.

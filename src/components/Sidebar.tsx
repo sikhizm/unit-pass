@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
+import { LayoutDashboard, LogOut, Menu, Settings, Users, X } from 'lucide-react';
 import { signOut } from '@/app/auth/actions';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -11,10 +11,14 @@ import { cn } from '@/lib/utils';
 /**
  * Navigation for the dashboard shell.
  *
- * Only functionality that actually exists is listed (Phase 1: Dashboard).
- * Later phases add their entries together with the feature.
+ * Only functionality that actually exists is listed (Phase 2: Dashboard,
+ * Customers, and company Settings). Later phases add their entries with each feature.
  */
-const NAV_ITEMS = [{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }] as const;
+const NAV_ITEMS = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard/customers', label: 'Customers', icon: Users },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+] as const;
 
 export function Sidebar({ companyName, userEmail }: { companyName: string | null; userEmail: string | null }) {
   const pathname = usePathname();
@@ -23,7 +27,7 @@ export function Sidebar({ companyName, userEmail }: { companyName: string | null
   const nav = (
     <nav className="flex flex-1 flex-col gap-1" aria-label="Main">
       {NAV_ITEMS.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`));
         const Icon = item.icon;
         return (
           <Link
@@ -32,7 +36,7 @@ export function Sidebar({ companyName, userEmail }: { companyName: string | null
             onClick={() => setMobileOpen(false)}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              'flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
               active
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -72,7 +76,7 @@ export function Sidebar({ companyName, userEmail }: { companyName: string | null
         <div id="mobile-nav" className="border-b bg-background px-4 py-3 md:hidden">
           {/* Close control keeps the overlay usable with one thumb */}
           <div className="mb-2 flex justify-end">
-            <Button variant="ghost" size="sm" onClick={() => setMobileOpen(false)}>
+            <Button variant="ghost" size="sm" className="h-10" onClick={() => setMobileOpen(false)}>
               <X className="mr-1 h-4 w-4" aria-hidden="true" /> Close
             </Button>
           </div>

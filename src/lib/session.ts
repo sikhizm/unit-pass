@@ -3,7 +3,7 @@ import { getSupabaseServerClient } from '@/lib/supabase/server';
 import type { CompanyRow, Membership, SessionUser } from '@/lib/types';
 
 const COMPANY_COLUMNS =
-  'id, name, logo_url, contact_name, phone, email, website, address, default_service_interval, created_at, updated_at';
+  'id, name, logo_url, contact_name, phone, email, website, address, service_booking_url, default_service_interval, created_at, updated_at';
 
 /**
  * Next.js signals control flow (dynamic rendering, redirect, notFound) by

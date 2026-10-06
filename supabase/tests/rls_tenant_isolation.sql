@@ -8,9 +8,9 @@
 -- Run:
 --   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_tenant_isolation.sql
 --
--- Expected result: a series of "PASS: ..." notices and a final
--- "ALL CHECKS PASSED" notice, ending with ROLLBACK. Any failed assertion raises
--- an exception -> non-zero exit code (never silently "passes").
+-- Expected result: Phase 1 and Phase 2 "PASS: ..." notices and a final
+-- "ALL CHECKS PASSED (Phase 1 + Phase 2 tenant isolation)" notice, ending with
+-- ROLLBACK. Any failed assertion raises an exception -> non-zero exit code.
 --
 -- Fixtures (deterministic ids so assertions can reference them as literals):
 --   user A    11111111-1111-4111-8111-111111111111
@@ -47,6 +47,33 @@ values
   ('11111111-1111-4111-8111-111111111111', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'owner'),
   ('22222222-2222-4222-8222-222222222222', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'owner')
 on conflict (user_id, company_id) do update set role = excluded.role;
+
+-- Phase 2 fixtures: matching search terms prove that RLS scopes search results.
+insert into public.customers (
+  id, company_id, first_name, last_name, email, phone, city, state, archived_at
+)
+values
+  (
+    '33333333-3333-4333-8333-333333333331',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'Casey', 'Miller', 'casey.miller@alpha.test', '555-1001', 'Springfield', 'IL', null
+  ),
+  (
+    '33333333-3333-4333-8333-333333333332',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'Archived', 'Miller', 'archived.miller@alpha.test', '555-1002', 'Springfield', 'IL', now()
+  ),
+  (
+    '44444444-4444-4444-8444-444444444441',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'Casey', 'Miller', 'casey.miller@bravo.test', '555-2001', 'Dayton', 'OH', null
+  ),
+  (
+    '44444444-4444-4444-8444-444444444442',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'Archived', 'Miller', 'archived.miller@bravo.test', '555-2002', 'Dayton', 'OH', now()
+  )
+on conflict (id) do nothing;
 
 -- The sign-up trigger must have created the profiles rows.
 do $$
@@ -247,7 +274,7 @@ end
 $$;
 
 -- -----------------------------------------------------------------------------
--- 1.10 Anonymous role has no access at all to tenant tables.
+-- 1.10 Anonymous role has no access at all to Phase 1 tenant tables.
 -- -----------------------------------------------------------------------------
 reset role;
 set local role anon;
@@ -275,9 +302,208 @@ begin
   end;
 
   if v_blocked <> 3 then
-    raise exception 'FAIL: anonymous role could read tenant tables (% of 3 blocked)', v_blocked;
+    raise exception 'FAIL: anonymous role could read Phase 1 tenant tables (% of 3 blocked)', v_blocked;
   end if;
   raise notice 'PASS: 1.10 anon has no access to companies/profiles/company_members';
+end
+$$;
+
+-- =============================================================================
+-- SECTION 2 — PHASE 2: customers
+-- =============================================================================
+reset role;
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"11111111-1111-4111-8111-111111111111","role":"authenticated"}';
+
+-- 2.1 A can see its own active and archived customers, but no Company B rows.
+do $$
+declare
+  v_own integer;
+  v_other integer;
+begin
+  select count(*) into v_own
+    from public.customers
+    where id in (
+      '33333333-3333-4333-8333-333333333331',
+      '33333333-3333-4333-8333-333333333332'
+    );
+  if v_own <> 2 then
+    raise exception 'FAIL: A sees % of its 2 customer rows', v_own;
+  end if;
+
+  select count(*) into v_other
+    from public.customers
+    where company_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  if v_other <> 0 then
+    raise exception 'FAIL: A can select Company B customers (rows=%)', v_other;
+  end if;
+  raise notice 'PASS: 2.1 A can select only its own customers, including archived rows';
+end
+$$;
+
+-- 2.2 Forged cross-tenant updates/archives affect no rows; own archive works.
+do $$
+declare
+  v_updated integer;
+begin
+  update public.customers
+    set first_name = 'Hijacked', archived_at = now()
+    where id = '44444444-4444-4444-8444-444444444441';
+  get diagnostics v_updated = row_count;
+  if v_updated <> 0 then
+    raise exception 'FAIL: A updated/archived a Company B customer (rows=%)', v_updated;
+  end if;
+
+  update public.customers
+    set archived_at = null
+    where id = '44444444-4444-4444-8444-444444444442';
+  get diagnostics v_updated = row_count;
+  if v_updated <> 0 then
+    raise exception 'FAIL: A unarchived a Company B customer (rows=%)', v_updated;
+  end if;
+
+  update public.customers
+    set archived_at = now()
+    where id = '33333333-3333-4333-8333-333333333331';
+  get diagnostics v_updated = row_count;
+  if v_updated <> 1 then
+    raise exception 'FAIL: A could not archive its own customer (rows=%)', v_updated;
+  end if;
+  raise notice 'PASS: 2.2 A cannot update/archive B, and can archive its own customer';
+end
+$$;
+
+-- 2.3 A's case-insensitive multi-column search sees matching A rows only.
+do $$
+declare
+  v_matches integer;
+  v_foreign integer;
+begin
+  select count(*) into v_matches
+    from public.customers
+    where first_name ilike '%Casey%'
+       or last_name ilike '%Miller%'
+       or email ilike '%Miller%'
+       or phone ilike '%Miller%';
+  if v_matches <> 2 then
+    raise exception 'FAIL: A search returned % matching rows (expected its 2 rows)', v_matches;
+  end if;
+
+  select count(*) into v_foreign
+    from public.customers
+    where company_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      and last_name ilike '%Miller%';
+  if v_foreign <> 0 then
+    raise exception 'FAIL: A search returned % Company B customer rows', v_foreign;
+  end if;
+  raise notice 'PASS: 2.3 customer search returns matching Company A rows only';
+end
+$$;
+
+-- 2.4 An archived customer remains visible to its own company, never another.
+do $$
+declare
+  v_own_archived integer;
+  v_foreign_archived integer;
+begin
+  select count(*) into v_own_archived
+    from public.customers
+    where id = '33333333-3333-4333-8333-333333333332'
+      and archived_at is not null;
+  if v_own_archived <> 1 then
+    raise exception 'FAIL: A cannot see its own archived customer (rows=%)', v_own_archived;
+  end if;
+
+  select count(*) into v_foreign_archived
+    from public.customers
+    where id = '44444444-4444-4444-8444-444444444442'
+      and archived_at is not null;
+  if v_foreign_archived <> 0 then
+    raise exception 'FAIL: A can see B archived customer (rows=%)', v_foreign_archived;
+  end if;
+  raise notice 'PASS: 2.4 archived rows remain visible only to their own company';
+end
+$$;
+
+-- 2.5 A cannot forge company_id on insert: RLS WITH CHECK must reject it.
+do $$
+declare
+  v_rejected boolean := false;
+begin
+  begin
+    insert into public.customers (company_id, first_name, last_name)
+    values ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Forged', 'Customer');
+  exception
+    when insufficient_privilege or check_violation then
+      v_rejected := true;
+  end;
+
+  if not v_rejected then
+    raise exception 'FAIL: A inserted a customer with Company B company_id';
+  end if;
+  raise notice 'PASS: 2.5 A customer insert with Company B company_id is rejected by WITH CHECK';
+end
+$$;
+
+-- A can restore its own archived customer; the application uses this action
+-- instead of deleting customer records.
+do $$
+declare
+  v_updated integer;
+begin
+  update public.customers
+    set archived_at = null
+    where id = '33333333-3333-4333-8333-333333333332';
+  get diagnostics v_updated = row_count;
+  if v_updated <> 1 then
+    raise exception 'FAIL: A could not unarchive its own customer (rows=%)', v_updated;
+  end if;
+  raise notice 'PASS: 2.6 A can unarchive its own customer';
+end
+$$;
+
+-- 2.7 Company A cannot change Company B's Phase 2 profile fields.
+do $$
+declare
+  v_updated integer;
+begin
+  update public.companies
+    set service_booking_url = 'https://forged.example/book', default_service_interval = 48
+    where id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  get diagnostics v_updated = row_count;
+  if v_updated <> 0 then
+    raise exception 'FAIL: A updated Company B profile settings (rows=%)', v_updated;
+  end if;
+
+  update public.companies
+    set service_booking_url = 'https://alpha.example/book', default_service_interval = 24
+    where id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  get diagnostics v_updated = row_count;
+  if v_updated <> 1 then
+    raise exception 'FAIL: A could not update its own Phase 2 profile settings (rows=%)', v_updated;
+  end if;
+  raise notice 'PASS: 2.7 company profile updates are tenant-scoped';
+end
+$$;
+
+-- 2.8 Anonymous role has no access to customers.
+reset role;
+set local role anon;
+
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform 1 from public.customers limit 1;
+  exception when others then
+    v_blocked := true;
+  end;
+
+  if not v_blocked then
+    raise exception 'FAIL: anonymous role could read customers';
+  end if;
+  raise notice 'PASS: 2.8 anon has no access to customers';
 end
 $$;
 
@@ -285,7 +511,7 @@ reset role;
 
 do $$
 begin
-  raise notice 'ALL CHECKS PASSED (Phase 1 tenant isolation)';
+  raise notice 'ALL CHECKS PASSED (Phase 1 + Phase 2 tenant isolation)';
 end
 $$;
 
